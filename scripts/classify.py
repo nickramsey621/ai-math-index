@@ -26,8 +26,8 @@ except ImportError:
 SCHEMA = {
     "type": "object",
     "properties": {
-        "formal": {"type": ["string", "null"], "enum": ["used", "subject", "incidental", None]},
-        "ai": {"type": ["string", "null"], "enum": ["used", "subject", "incidental", None]},
+        "formal": {"type": "string", "enum": ["used", "subject", "incidental", "none"]},
+        "ai": {"type": "string", "enum": ["used", "subject", "incidental", "none"]},
     },
     "required": ["formal", "ai"],
     "additionalProperties": False,
@@ -41,7 +41,7 @@ For each group present in the flags, classify the match:
 - "subject": the tool is the object of study — e.g. evaluating LLM math ability, ML theory, formal-methods metatheory — but was not claimed as an aid in doing the mathematics.
 - "incidental": false positive — the phrase means something else (a person named Claude, Gemini surfaces, GPT as an unrelated acronym, "lean" as an adjective, etc.).
 
-Set a group's value to null if no flag from that group is present.
+Set a group's value to "none" if no flag from that group is present.
 
 Title: {title}
 Abstract: {abstract}
@@ -78,7 +78,7 @@ def main():
                 changed = True
                 n += 1
             except anthropic.APIStatusError as e:
-                print(f"classify: API error on {rec['id']}: {e.status_code}, stopping")
+                print(f"classify: API error on {rec['id']}: {e.status_code} {e.message}, stopping")
                 break
         if changed:
             with open(path, "w") as f:
