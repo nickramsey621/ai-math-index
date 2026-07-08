@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI in Mathematics — an arXiv index</title>
+<style>
+:root {
+  --surface-1: #fcfcfb; --page: #f9f9f7;
+  --ink-1: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --baseline: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --s-ai: #2a78d6; --s-formal: #1baf7a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-1: #1a1a19; --page: #0d0d0d;
+    --ink-1: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+    --s-ai: #3987e5; --s-formal: #199e70;
+  }
+}
+* { box-sizing: border-box; margin: 0; }
+body {
+  background: var(--page); color: var(--ink-1);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding: 32px 16px 48px;
+}
+main { max-width: 880px; margin: 0 auto; }
+h1 { font-size: 22px; font-weight: 650; }
+.sub { color: var(--ink-2); margin: 4px 0 24px; max-width: 60ch; }
+.tiles { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.tile {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 16px; flex: 1 1 160px; min-width: 160px;
+}
+.tile .label { color: var(--ink-2); font-size: 13px; }
+.tile .value { font-size: 28px; font-weight: 600; }
+.tile .delta { font-size: 13px; color: var(--ink-2); }
+.card {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px 16px 8px; margin-bottom: 20px; position: relative;
+}
+.card h2 { font-size: 15px; font-weight: 600; }
+.card .note { font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
+.legend { display: flex; gap: 16px; font-size: 13px; color: var(--ink-2); margin: 4px 0 2px; }
+.legend .key { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; border-radius: 1px; }
+svg { display: block; width: 100%; height: auto; }
+.tooltip {
+  position: absolute; pointer-events: none; display: none; z-index: 2;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.12); padding: 8px 10px; font-size: 13px;
+  min-width: 150px;
+}
+.tooltip .t-date { color: var(--ink-2); margin-bottom: 2px; }
+.tooltip .row { display: flex; align-items: baseline; gap: 6px; }
+.tooltip .row .key { display: inline-block; width: 10px; border-top: 2px solid; border-radius: 1px; flex: none; align-self: center; }
+.tooltip .row .v { font-weight: 600; }
+.tooltip .row .n { color: var(--ink-2); }
+details { margin-bottom: 24px; }
+summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
+table { border-collapse: collapse; font-size: 13px; margin-top: 8px; width: 100%; background: var(--surface-1); }
+th, td { text-align: right; padding: 4px 10px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--ink-2); font-weight: 600; }
+footer { color: var(--muted); font-size: 13px; max-width: 70ch; }
+footer a { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<main>
+  <h1>AI in mathematics — an arXiv index</h1>
+  <p class="sub">Daily-updated counts of arXiv math submissions whose title, abstract, or
+  comments mention AI models or proof assistants. Mentions are a lower bound on actual
+  use — they measure <em>disclosure</em>, and disclosure norms are themselves changing.</p>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <h2>Math submissions per month</h2>
+    <p class="note">All papers in arXiv <code>set=math</code> (incl. cross-lists), by submission month.</p>
+    <div id="chart-vol"></div>
+  </div>
+
+  <div class="card">
+    <h2>Mentions per 1,000 papers</h2>
+    <p class="note">Share of papers mentioning AI models (GPT, LLMs, AlphaProof, …) or
+    formalization tools (Lean, Isabelle, Coq/Rocq, …).</p>
+    <div class="legend" id="legend"></div>
+    <div id="chart-rate"></div>
+  </div>
+
+  <details>
+    <summary>Data table</summary>
+    <table id="table"></table>
+  </details>
+
+  <footer id="foot"></footer>
+</main>
+<script>
+"use strict";
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const ymLabel = ym => MONTHS[+ym.slice(2) - 1] + " 20" + ym.slice(0, 2);
+const fmt = n => n.toLocaleString("en-US");
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function ticks(max) {
+  const step = [1, 2, 2.5, 5, 10].map(s => s * Math.pow(10, Math.floor(Math.log10(max))))
+    .concat([1, 2, 2.5, 5].map(s => s * Math.pow(10, Math.floor(Math.log10(max)) - 1)))
+    .sort((a, b) => a - b).find(s => max / s <= 5) || max;
+  const out = [];
+  for (let v = 0; ; v += step) { out.push(v); if (v >= max) break; }
+  return out;
+}
+
+// series: [{name, color, values:[num|null], fmt(v,i)->tooltip rows extra}]
+function lineChart(container, labels, series, opts) {
+  const W = 860, H = 300, L = 46, R = 66, T = 14, B = 26;
+  const iw = W - L - R, ih = H - T - B;
+  const partial = opts.partial; // last point is an incomplete month
+  const max = Math.max(...series.flatMap(s => s.values.filter(v => v != null)));
+  const tk = ticks(max * 1.05);
+  const ymax = tk[tk.length - 1];
+  const x = i => L + (labels.length === 1 ? iw / 2 : i * iw / (labels.length - 1));
+  const y = v => T + ih - v / ymax * ih;
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const add = (parent, tag, attrs, text) => {
+    const n = document.createElementNS(ns, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text !== undefined) n.textContent = text;
+    parent.appendChild(n); return n;
+  };
+  // grid + y ticks
+  for (const v of tk) {
+    add(svg, "line", { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: v === 0 ? css("--baseline") : css("--grid"), "stroke-width": 1 });
+    if (v > 0) add(svg, "text", { x: L - 6, y: y(v) + 4, "text-anchor": "end", fill: css("--muted"), "font-size": 11 }, fmt(v));
+  }
+  // x labels: Jan of each year + latest
+  labels.forEach((ym, i) => {
+    if (ym.slice(2) === "01" || i === labels.length - 1)
+      add(svg, "text", { x: x(i), y: H - 8, "text-anchor": "middle", fill: css("--muted"), "font-size": 11 },
+          i === labels.length - 1 && ym.slice(2) !== "01" ? MONTHS[+ym.slice(2) - 1] : "20" + ym.slice(0, 2));
+  });
+  // series
+  for (const s of series) {
+    const pts = s.values.map((v, i) => v == null ? null : [x(i), y(v)]).filter(Boolean);
+    const solid = partial ? pts.slice(0, -1) : pts;
+    const path = p => p.map((q, i) => (i ? "L" : "M") + q[0].toFixed(1) + " " + q[1].toFixed(1)).join("");
+    if (opts.area && solid.length > 1)
+      add(svg, "path", { d: path(solid) + `L${solid[solid.length-1][0]} ${y(0)}L${solid[0][0]} ${y(0)}Z`, fill: s.color, opacity: 0.1 });
+    add(svg, "path", { d: path(solid), fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" });
+    if (partial && pts.length > 1)
+      add(svg, "path", { d: path(pts.slice(-2)), fill: "none", stroke: s.color, "stroke-width": 2, "stroke-dasharray": "3 4", "stroke-linecap": "round" });
+    // end marker: ring in surface color; hollow when partial
+    const last = pts[pts.length - 1];
+    add(svg, "circle", { cx: last[0], cy: last[1], r: 5.5, fill: css("--surface-1") });
+    add(svg, "circle", { cx: last[0], cy: last[1], r: 4, fill: partial ? css("--surface-1") : s.color, stroke: s.color, "stroke-width": 2 });
+    const lastV = s.values[s.values.length - 1];
+    add(svg, "text", { x: last[0] + 10, y: last[1] + 4, fill: css("--ink-1"), "font-size": 12, "font-weight": 600 }, s.endLabel(lastV));
+  }
+  // crosshair + tooltip
+  const cross = add(svg, "line", { y1: T, y2: T + ih, stroke: css("--baseline"), "stroke-width": 1, visibility: "hidden" });
+  const tip = el("div", "tooltip");
+  container.appendChild(tip);
+  const hit = add(svg, "rect", { x: L, y: T, width: iw, height: ih, fill: "transparent" });
+  const show = i => {
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i));
+    cross.setAttribute("visibility", "visible");
+    tip.replaceChildren();
+    tip.appendChild(el("div", "t-date", ymLabel(labels[i]) + (partial && i === labels.length - 1 ? " (partial month)" : "")));
+    for (const s of series) {
+      if (s.values[i] == null) continue;
+      const row = el("div", "row");
+      const key = el("span", "key"); key.style.borderTopColor = s.color;
+      row.appendChild(key);
+      row.appendChild(el("span", "v", s.tipValue(s.values[i], i)));
+      row.appendChild(el("span", "n", s.tipNote(i)));
+      tip.appendChild(row);
+    }
+    const rect = container.getBoundingClientRect();
+    const px = x(i) / W * rect.width;
+    tip.style.display = "block";
+    tip.style.left = Math.min(px + 12, rect.width - tip.offsetWidth - 4) + "px";
+    tip.style.top = "10px";
+  };
+  const idx = e => {
+    const r = svg.getBoundingClientRect();
+    const gx = (e.clientX - r.left) / r.width * W;
+    return Math.max(0, Math.min(labels.length - 1, Math.round((gx - L) / iw * (labels.length - 1))));
+  };
+  hit.addEventListener("pointermove", e => show(idx(e)));
+  hit.addEventListener("pointerleave", () => { cross.setAttribute("visibility", "hidden"); tip.style.display = "none"; });
+  container.appendChild(svg);
+}
+
+fetch("data.json").then(r => r.json()).then(data => {
+  const M = data.months.filter(m => m.papers > 50); // drop empty/stub months
+  const now = new Date();
+  const curYm = String(now.getFullYear() % 100).padStart(2, "0") + String(now.getMonth() + 1).padStart(2, "0");
+  const partial = M[M.length - 1].ym === curYm;
+  const labels = M.map(m => m.ym);
+  const rate = (m, g) => m.papers ? 1000 * m[g] / m.papers : 0;
+  const used = (m, g) => m.cls && m.cls[g] ? (m.cls[g].used || 0) : null;
+
+  // stat tiles vs same month last year (latest complete month)
+  const li = M.length - 1 - (partial ? 1 : 0);
+  const latest = M[li];
+  const yago = M.find(m => m.ym === String(+latest.ym - 100).padStart(4, "0"));
+  const tiles = document.getElementById("tiles");
+  const tile = (label, value, delta) => {
+    const t = el("div", "tile");
+    t.appendChild(el("div", "label", label));
+    t.appendChild(el("div", "value", value));
+    t.appendChild(el("div", "delta", delta));
+    tiles.appendChild(t);
+  };
+  const pct = (a, b) => (a >= b ? "+" : "−") + Math.abs(100 * (a - b) / b).toFixed(0) + "%";
+  tile("Submissions, " + ymLabel(latest.ym), fmt(latest.papers), yago ? pct(latest.papers, yago.papers) + " vs " + ymLabel(yago.ym) : "");
+  tile("AI mentions / 1,000", rate(latest, "ai").toFixed(1), yago ? "was " + rate(yago, "ai").toFixed(1) + " in " + ymLabel(yago.ym) : "");
+  tile("Formalization / 1,000", rate(latest, "formal").toFixed(1), yago ? "was " + rate(yago, "formal").toFixed(1) + " in " + ymLabel(yago.ym) : "");
+
+  lineChart(document.getElementById("chart-vol"), labels, [{
+    name: "Submissions", color: css("--s-ai"),
+    values: M.map(m => m.papers),
+    endLabel: v => fmt(v),
+    tipValue: v => fmt(v),
+    tipNote: () => "papers",
+  }], { area: true, partial });
+
+  const mkSeries = (name, g, color) => ({
+    name, color,
+    values: M.map(m => rate(m, g)),
+    endLabel: v => v.toFixed(1),
+    tipValue: (v) => v.toFixed(1) + "/1k",
+    tipNote: i => {
+      const m = M[i], u = used(m, g);
+      return m[g] + " papers" + (u != null ? ", " + u + " classified as used" : "");
+    },
+  });
+  const series = [mkSeries("AI models", "ai", css("--s-ai")), mkSeries("Formalization", "formal", css("--s-formal"))];
+  const legend = document.getElementById("legend");
+  for (const s of series) {
+    const item = el("span");
+    const key = el("span", "key"); key.style.borderTopColor = s.color;
+    item.appendChild(key); item.appendChild(document.createTextNode(s.name));
+    legend.appendChild(item);
+  }
+  lineChart(document.getElementById("chart-rate"), labels, series, { partial });
+
+  // table view
+  const table = document.getElementById("table");
+  const hr = el("tr");
+  for (const h of ["Month", "Papers", "AI mentions", "AI /1k", "Formalization", "Formal /1k"]) hr.appendChild(el("th", null, h));
+  table.appendChild(hr);
+  for (const m of [...M].reverse()) {
+    const tr = el("tr");
+    for (const v of [ymLabel(m.ym) + (partial && m.ym === curYm ? " (partial)" : ""), fmt(m.papers), m.ai, rate(m, "ai").toFixed(1), m.formal, rate(m, "formal").toFixed(1)])
+      tr.appendChild(el("td", null, String(v)));
+    table.appendChild(tr);
+  }
+
+  const foot = document.getElementById("foot");
+  foot.appendChild(el("span", null,
+    "Updated " + data.updated + ". Papers bucketed by arXiv ID prefix (submission month); the current month is shown dashed and incomplete. " +
+    "Phrase matching over title + abstract + comments only — acknowledgment-section disclosures are not visible, so all rates undercount. "));
+  const a = el("a", null, "Methodology & source");
+  a.href = "https://github.com/nickramsey621/ai-math-index";
+  foot.appendChild(a);
+});
+</script>
+</body>
+</html>
