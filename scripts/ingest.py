@@ -7,7 +7,8 @@ Usage: ingest.py RAW.jsonl [RAW2.jsonl ...]
   months before MIN_YM are skipped (datestamp harvests include revisions of
   arbitrarily old papers).
 - data/papers/YYMM.csv gets one row per paper: id, created, primary category,
-  author count, phrase flags.
+  math subject classes (`mcats`, all math.* entries — OAI lists both alias
+  spellings, so math-ph papers carry math.MP), author count, phrase flags.
 - Papers with any flag also get their full text appended to
   data/hits/YYMM.jsonl for auditing and classification.
 - Already-recorded IDs are skipped (first version wins).
@@ -21,7 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PAPERS = os.path.join(ROOT, "data", "papers")
 HITS = os.path.join(ROOT, "data", "hits")
 MIN_YM = "2401"
-FIELDS = ["id", "created", "primary", "nauth", "flags"]
+FIELDS = ["id", "created", "primary", "mcats", "nauth", "flags"]
 
 def load_existing():
     seen = set()
@@ -53,6 +54,7 @@ def main():
                 new_rows.setdefault(ym, []).append({
                     "id": pid, "created": r.get("created") or "",
                     "primary": r["cats"][0] if r["cats"] else "",
+                    "mcats": ";".join(c for c in r["cats"] if c.startswith("math.")),
                     "nauth": len(r.get("authors", [])), "flags": ";".join(flags),
                 })
                 n_new += 1
