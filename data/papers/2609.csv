@@ -10281,3 +10281,5 @@ id,created,primary,mcats,nauth,flags
 2609.40352,2026-09-30,math.PR,math.PR;math.AP;math.MP,1,
 2609.40355,2026-09-30,quant-ph,math.MP,4,
 2609.40357,2026-09-30,math.DS,math.DS;math.GR;math.GT;math.PR,1,
+2609.32176,2026-09-26,cs.LG,math.IT,2,
+2609.39114,2026-09-30,cs.LG,math.OC,2,ai:llm;ai:llm_full
